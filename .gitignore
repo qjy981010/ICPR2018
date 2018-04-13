@@ -1,0 +1,4 @@
+data/
+*.zip
+ICPR_text_train_part*
+model/
