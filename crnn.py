@@ -1,4 +1,5 @@
 import torch.nn as nn
+import math
 
 
 class CRNN(nn.Module):
@@ -11,7 +12,7 @@ class CRNN(nn.Module):
     """
 
     def __init__(self, in_channels, out_channels):
-        super(CRNN, self).__init__()
+        super().__init__()
         self.in_channels = in_channels
         hidden_size = 256
         # CNN struct and parameters
