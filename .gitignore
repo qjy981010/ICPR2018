@@ -3,3 +3,4 @@ data/
 ICPR_text_train_part*
 model/
 __pycache__/
+.ipynb_checkpoints/
