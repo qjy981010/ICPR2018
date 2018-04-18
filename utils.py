@@ -11,30 +11,14 @@ from PIL import Image
 from crnn import CRNN
 
 
-class FixHeightResize(object):
-    """
-    Scale images to fixed height
-    """
-
-    def __init__(self, height=32, minwidth=100):
-        self.height = height
-        self.minwidth = minwidth
-
-    # img is an instance of PIL.Image
-    def __call__(self, img):
-        w, h = img.size
-        width = max(int(w * self.height / h), self.minwidth)
-        return img.resize((width, self.height), Image.ANTIALIAS)
-
-
 class SingleRatioImage(Dataset):
     """
     dataset to store images of the same ratio，(torch.utils.data.Dataset)
 
     Args:
         root (string): Root directory of images
-        training (bool, optional): If True, train the model, otherwise test it (default: True)
-        data_size (int, optional): size of data to load (default: All data)
+        ratio (int): Ratio of images after resizing
+        data_list (list: [(name1, label1), (name2, label2), ...]): list of data
     """
 
     def __init__(self, root, ratio, data_list):
@@ -61,6 +45,10 @@ class SingleRatioImage(Dataset):
 
 class LoadIter(object):
     """
+    Random Iter of a list of DataLoaders. 
+
+    Args:
+        loaders (list): list of DataLoader instances.
     """
 
     def __init__(self, loaders):
@@ -129,13 +117,13 @@ class LabelTransformer(object):
     encoder and decoder
 
     Args:
-        letters (str): Letters contained in the data
+        letters (str): Letters to recognize.
     """
 
     def __init__(self, letters):
         letters = ''.join(set(letters))
         self.encode_map = {letter: idx+1 for idx, letter in enumerate(letters)}
-        self.decode_map = ''.join((' ', letters))
+        self.decode_map = ''.join((' ', letters, ' '))
 
     def encode(self, text):
         if isinstance(text, str):

@@ -1,5 +1,7 @@
 data/
 *.zip
+*.pth
+*.pkl
 ICPR_text_train_part*
 model/
 __pycache__/
