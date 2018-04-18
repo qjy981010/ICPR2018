@@ -40,7 +40,7 @@ def train(root, start_epoch, epoch_num, letters, batch_size,
     use_cuda = torch.cuda.is_available()
     if not model:
         # create a new model if model is None
-        model = CRNN(1, len(letters) + 1)
+        model = CRNN(1, len(letters) + 2)
     # loss function
     criterion = CTCLoss()
     # Adadelta
