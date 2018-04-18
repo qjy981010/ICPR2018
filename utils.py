@@ -93,7 +93,11 @@ class Loader(object):
         # load data list
         data_list = {2:[], 5:[], 8:[]}
         with open(os.path.join(root, 'label.txt')) as fp:
-            for line in fp.readlines()[:data_size]:
+            lines = fp.readlines()
+            train_lines = lines[:100000]
+            test_lines = lines[100000:]
+            lines = train_lines if training else test_lines
+            for line in lines[:data_size]:
                 folder, name, label = line.split()[:3]
                 data_list[int(folder)].append((name+'.jpg', label))
         img_root = os.path.join(root, 'image')
@@ -105,7 +109,7 @@ class Loader(object):
         self.loaders = []
         for dataset in datasets:
             self.loaders.append(DataLoader(dataset, batch_size=batch_size,
-                                           shuffle=training, num_workers=4))
+                                           shuffle=training, num_workers=2))
         del datasets
 
     def __iter__(self):

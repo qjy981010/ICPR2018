@@ -44,7 +44,7 @@ def train(root, start_epoch, epoch_num, letters, batch_size,
     # loss function
     criterion = CTCLoss()
     # Adadelta
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.RMSprop(model.parameters(), lr=lr)
     if use_cuda:
         model = model.cuda()
         criterion = criterion.cuda()
@@ -145,7 +145,7 @@ def main(training=True):
         training (bool, optional): If True, train the model, otherwise test it (default: True)
     """
 
-    model_path = 'crnn.pth'
+    model_path = 'models/crnn.pth'
     with open('letters.txt', 'r') as fp:
         letters = fp.readline()
     root = 'data/'
@@ -153,16 +153,17 @@ def main(training=True):
         model = CRNN(1, len(letters) + 2)
         start_epoch = 0
         epoch_num = 50
-        lr = 0.00022
+        lr = 0.0001
         # if there is pre-trained model, load it
         if os.path.exists(model_path):
             print('Pre-trained model detected.\nLoading model...')
             model.load_state_dict(torch.load(model_path))
-        model = train(root, start_epoch, epoch_num, letters, 32,
-                    model=model, lr=lr, data_size=1000)
-        test(root, model, letters, 32, 500)
-        # save the trained model for training again
-        torch.save(model.state_dict(), model_path)
+        while (True):
+            model = train(root, start_epoch, epoch_num, letters, 32,
+                        model=model, lr=lr, data_size=1000)
+            test(root, model, letters, 32, 500)
+            # save the trained model for training again
+            torch.save(model.state_dict(), model_path)
     else:
         model = CRNN(1, len(letters) + 1)
         if os.path.exists(model_path):

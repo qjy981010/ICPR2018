@@ -2,10 +2,10 @@
 
 ### 目录结构
 
--ICPR2018
-  |-data: croped images
-  |-model: trained models
-  |-letter.txt: 存放所有字符的txt
+-ICPR2018  
+  |-data: croped images  
+  |-model: trained models  
+  |-letter.txt: 存放所有字符的txt  
 
 ### 提示
 
