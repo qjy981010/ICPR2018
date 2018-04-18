@@ -5,8 +5,8 @@
 ```
 ICPR2018  
   |—— data: croped images  
-  |—— model: trained models  
-  |—— letter.txt: 存放所有字符的txt  
+  |—— models: trained models  
+  |—— letters.txt: 存放所有字符的txt  
 ```
 
 ### 提示
