@@ -3,8 +3,8 @@
 
 import torch
 import os
+import Levenshtein
 import numpy as np
-import math
 import torch.optim as optim
 from torch.autograd import Variable
 from warpctc_pytorch import CTCLoss
@@ -123,6 +123,8 @@ def test(root, model, letters, batch_size, data_size=None):
     # .eval() has any effect on Dropout and BatchNorm.
     model.eval()
     correct = 0
+    total = 0
+    ratio_sum = 0
     for i, (img, origin_label) in enumerate(testloader):
         if use_cuda:
             img = img.cuda()
@@ -133,8 +135,12 @@ def test(root, model, letters, batch_size, data_size=None):
         outputs = labeltransformer.decode(outputs.data)
         correct += sum([out == real for out,
                         real in zip(outputs, origin_label)])
+        ratio_sum += sum([Levenshtein.ratio(out, real)
+                          for out, real in zip(outputs, origin_label)])
+        total += len(origin_label)
     # calc accuracy
-    print('test accuracy: ', correct / 30, '%')
+    print('Test accuracy: ', correct / total * 100, '%')
+    print('Levenshtein ratio: ', ratio_sum / total * 100, '%')
 
 
 def main(training=True):
@@ -152,7 +158,7 @@ def main(training=True):
     if training:
         model = CRNN(1, len(letters) + 2)
         start_epoch = 0
-        epoch_num = 50
+        epoch_num = 1
         lr = 0.0001
         # if there is pre-trained model, load it
         if os.path.exists(model_path):
