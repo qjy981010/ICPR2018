@@ -158,7 +158,7 @@ def main(training=True):
     if training:
         model = CRNN(1, len(letters) + 2)
         start_epoch = 0
-        epoch_num = 1
+        epoch_num = 50
         lr = 0.0001
         # if there is pre-trained model, load it
         if os.path.exists(model_path):
@@ -166,8 +166,8 @@ def main(training=True):
             model.load_state_dict(torch.load(model_path))
         while (True):
             model = train(root, start_epoch, epoch_num, letters, 32,
-                        model=model, lr=lr, data_size=1000)
-            test(root, model, letters, 32, 500)
+                        model=model, lr=lr, data_size=10000)
+            test(root, model, letters, 32, 5000)
             # save the trained model for training again
             torch.save(model.state_dict(), model_path)
     else:
