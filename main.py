@@ -36,7 +36,7 @@ def train(root, start_epoch, epoch_num, letters, batch_size,
     # load data
     trainloader = Loader(root, batch_size=batch_size,
                          training=True, data_size=data_size)
-    # use gpu or not
+    # use gpu or not?
     use_cuda = torch.cuda.is_available()
     if not model:
         # create a new model if model is None
@@ -150,7 +150,7 @@ def main(training=True):
     Args:
         training (bool, optional): If True, train the model, otherwise test it (default: True)
     """
-
+    
     model_path = 'models/crnn.pth'
     with open('letters.txt', 'r') as fp:
         letters = fp.readline()
@@ -176,6 +176,16 @@ def main(training=True):
             model.load_state_dict(torch.load(model_path))
         test(root, model, letters, 32, 500)
 
+def test_env():
+    model_dir = 'model/'
+    data_dir = 'data/'
+    if os.path.exists(model_dir) and os.path.exists(data_dir):
+        return True
+    else:
+        return False
 
 if __name__ == '__main__':
-    main(training=True)
+    if test_env():
+        main(training=True)
+    else:
+        print('There is something wrong with your environment, for more information, please look at README')
