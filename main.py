@@ -177,7 +177,7 @@ def main(training=True):
         test(root, model, letters, 32, 500)
 
 def test_env():
-    model_dir = 'model/'
+    model_dir = 'models/'
     data_dir = 'data/'
     if os.path.exists(model_dir) and os.path.exists(data_dir):
         return True
