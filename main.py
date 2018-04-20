@@ -37,18 +37,27 @@ def train(root, model_path, letters, batch_size, epoch_num,
 
     model = CRNN(1, len(letters) + 2)
     if optim == 'adam':
-        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+        optimizer = torch.optim.Adam(model.parameters())
     elif optim == 'adadelta':
-        optimizer = torch.optim.Adadelta(model.parameters(), lr=lr)
+        optimizer = torch.optim.Adadelta(model.parameters())
     else:
-        optimizer = torch.optim.RMSprop(model.parameters(), lr=lr)
+        optimizer = torch.optim.RMSprop(model.parameters())
     start_epoch = 0
     if os.path.exists(model_path):
         print('Pre-trained model detected.\nLoading model...')
         checkpoint = torch.load(model_path)
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optim'])
+        if lr != None:
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = lr
         start_epoch = checkpoint['epoch']
+    else:
+        if lr == None:
+            lr = 0.00005
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = lr
+
 
     trainloader = Loader(root, batch_size=batch_size, training=True,
                          data_size=data_size, workers=workers)
@@ -170,7 +179,8 @@ if __name__ == '__main__':
     parser.add_argument('--batchsize', type=int, default=64, help='input batch size (default=64)')
     parser.add_argument('--data_size', type=int, default=None, help='input data size (default all data)')
     parser.add_argument('--epoch_num', type=int, default=50, help='number of epochs to train for (default=50)')
-    parser.add_argument('--lr', type=float, default=0.00005, help='learning rate for Critic (default=0.00005)')
+    parser.add_argument('--check_epoch', type=int, default=10, help='epoch to save and test (default=10)')
+    parser.add_argument('--lr', type=float, default=None, help='learning rate for Critic (default=no change or 0.00005)')
     parser.add_argument('--adam', action='store_true', help='Whether to use adam (default is rmsprop)')
     parser.add_argument('--adadelta', action='store_true', help='Whether to use adadelta (default is rmsprop)')
     opt = parser.parse_args()
@@ -188,9 +198,10 @@ if __name__ == '__main__':
     else:
         optim = 'rmsprop'
 
-    if not opt.test:
-        train(opt.root, opt.model_path, letters, opt.batchsize,
-              opt.epoch_num, lr=opt.lr, data_size=opt.data_size,
-              optim=optim, workers=opt.workers)
-    test(opt.root, opt.model_path, letters, opt.batchsize,
-         data_size=opt.data_size, workers=opt.workers)
+    for i in range(opt.epoch_num // opt.check_epoch):
+        if not opt.test:
+            train(opt.root, opt.model_path, letters, opt.batchsize,
+                  opt.check_epoch, lr=opt.lr, data_size=opt.data_size,
+                  optim=optim, workers=opt.workers)
+        test(opt.root, opt.model_path, letters, opt.batchsize,
+             data_size=opt.data_size, workers=opt.workers)
