@@ -4,8 +4,9 @@
 import torch
 import os
 import Levenshtein
+import pickle
+import argparse
 import numpy as np
-import torch.optim as optim
 from torch.autograd import Variable
 from warpctc_pytorch import CTCLoss
 
@@ -13,48 +14,56 @@ from crnn import CRNN
 from utils import *
 
 
-def train(root, start_epoch, epoch_num, letters, batch_size,
-          model=None, lr=0.1, data_size=None):
+def train(root, model_path, letters, batch_size, epoch_num,
+          lr=0.00005, data_size=None, optim='rmsprop', workers=2):
     """
     Train CRNN model
 
     Args:
         root (str): Root directory of dataset
-        start_epoch (int): Epoch number to start
-        epoch_num (int): Epoch number to train
+        model_path (str): Path to save/load model
         letters (str): Letters contained in the data
         batch_size (int): Size of each batch
-        model (CRNN, optional): CRNN model (default: None)
+        epoch_num (int): Epoch number to train
         lr (float, optional): Coefficient that scale delta before it is applied
             to the parameters (default: 1.0)
         data_size (int, optional): Size of data to use (default: All data)
+        optim (str): Name of optim method (default: 'rmsprop')
+        workers (int): Workers number to load data of each ratio (default: 2)
 
     Returns:
         CRNN: Trained CRNN model
     """
 
-    # load data
-    trainloader = Loader(root, batch_size=batch_size,
-                         training=True, data_size=data_size)
+    model = CRNN(1, len(letters) + 2)
+    if optim == 'adam':
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    elif optim == 'adadelta':
+        optimizer = torch.optim.Adadelta(model.parameters(), lr=lr)
+    else:
+        optimizer = torch.optim.RMSprop(model.parameters(), lr=lr)
+    start_epoch = 0
+    if os.path.exists(model_path):
+        print('Pre-trained model detected.\nLoading model...')
+        checkpoint = torch.load(model_path)
+        model.load_state_dict(checkpoint['model'])
+        optimizer.load_state_dict(checkpoint['optim'])
+        start_epoch = checkpoint['epoch']
+
+    trainloader = Loader(root, batch_size=batch_size, training=True,
+                         data_size=data_size, workers=workers)
+    labeltransformer = LabelTransformer(letters)
+    criterion = CTCLoss()
+
     # use gpu or not?
     use_cuda = torch.cuda.is_available()
-    if not model:
-        # create a new model if model is None
-        model = CRNN(1, len(letters) + 2)
-    # loss function
-    criterion = CTCLoss()
-    # Adadelta
-    optimizer = optim.RMSprop(model.parameters(), lr=lr)
     if use_cuda:
         model = model.cuda()
         criterion = criterion.cuda()
     else:
         print("*****   Warning: Cuda isn't available!  *****")
-    # get encoder and decoder
-    labeltransformer = LabelTransformer(letters)
 
     print('====   Training..   ====')
-    # .train() has any effect on Dropout and BatchNorm.
     model.train()
     for epoch in range(start_epoch, start_epoch + epoch_num):
         print('----    epoch: %d    ----' % (epoch, ))
@@ -66,50 +75,53 @@ def train(root, start_epoch, epoch_num, letters, batch_size,
             img, label = Variable(img), Variable(label)
             label_length = Variable(label_length)
             optimizer.zero_grad()
-            # put images in
+
             outputs = model(img)
             output_length = Variable(torch.IntTensor(
                 [outputs.size(0)]*outputs.size(1)))
-            # calc loss
+
             loss = criterion(outputs, label, output_length, label_length)
             if (np.isnan(loss.data[0])):
-                # print(loss)
-                # print(sum(np.isnan(label.data.view(-1))))
-                # print(sum(np.isnan(img.data.view(-1))))
-                # print(sum(np.isnan(outputs.data.view(-1))))
-                # print(sum(np.isnan(output_length.data.view(-1))))
-                # print(sum(np.isnan(label_length.data.view(-1))))
-                # print(sum(np.isnan(outputs.data.view(-1))))
-                # allsum = 0
-                # for k in model.parameters():
-                #     allsum += sum(np.isnan(k.data.view(-1)))
-                # print(allsum)
                 continue
-            # update
             loss.backward()
-            # torch.nn.utils.clip_grad_norm(model.parameters(), 0.5)
             optimizer.step()
             loss_sum += loss.data[0]
         print('loss = %f' % (loss_sum, ))
     print('Finished Training')
+
+    checkpoint = {
+        'model':model.state_dict(),
+        'optim':optimizer.state_dict(),
+        'epoch':start_epoch+epoch_num
+    }
+    torch.save(checkpoint, model_path)
     return model
 
 
-def test(root, model, letters, batch_size, data_size=None):
+def test(root, model_path, letters, batch_size, data_size=None, workers=2):
     """
     Test CRNN model
 
     Args:
         root (str): Root directory of dataset
-        model (CRNN, optional): trained CRNN model
+        model_path (str): Path to save/load model
         letters (str): Letters contained in the data
         batch_size (int): Size of each batch
         data_size (int, optional): Size of data to use (default: All data)
+        workers (int): Workers number to load data of each ratio (default: 2)
     """
 
-    # load data
-    testloader = Loader(root, batch_size=batch_size,
-                         training=False, data_size=data_size)
+    if os.path.exists(model_path):
+        model = CRNN(1, len(letters) + 2)
+        model.load_state_dict(torch.load(model_path)['model'])
+    else:
+        print('***** No model detected in %s! *****' % (model_path,))
+        return
+    testloader = Loader(root, batch_size=batch_size, training=False,
+                        data_size=data_size, workers=workers)
+    trainloader = Loader(root, batch_size=batch_size, training=True,
+                        data_size=data_size, workers=workers)
+    loaders = [testloader, trainloader]
     # use gpu or not
     use_cuda = torch.cuda.is_available()
     if use_cuda:
@@ -122,70 +134,63 @@ def test(root, model, letters, batch_size, data_size=None):
     print('====    Testing..   ====')
     # .eval() has any effect on Dropout and BatchNorm.
     model.eval()
-    correct = 0
-    total = 0
-    ratio_sum = 0
-    for i, (img, origin_label) in enumerate(testloader):
-        if use_cuda:
-            img = img.cuda()
-        img = Variable(img)
+    for j in range(len(loaders)):
+        correct = 0
+        total = 0
+        ratio_sum = 0
+        for i, (img, origin_label) in enumerate(loaders[j]):
+            if use_cuda:
+                img = img.cuda()
+            img = Variable(img)
 
-        outputs = model(img)  # length × batch × num_letters
-        outputs = outputs.max(2)[1].transpose(0, 1)  # batch × length
-        outputs = labeltransformer.decode(outputs.data)
-        correct += sum([out == real for out,
-                        real in zip(outputs, origin_label)])
-        ratio_sum += sum([Levenshtein.ratio(out, real)
-                          for out, real in zip(outputs, origin_label)])
-        total += len(origin_label)
-    # calc accuracy
-    print('Test accuracy: ', correct / total * 100, '%')
-    print('Levenshtein ratio: ', ratio_sum / total * 100, '%')
+            outputs = model(img)  # length × batch × num_letters
+            outputs = outputs.max(2)[1].transpose(0, 1)  # batch × length
+            outputs = labeltransformer.decode(outputs.data)
+            correct += sum([out == real for out,
+                            real in zip(outputs, origin_label)])
+            ratio_sum += sum([Levenshtein.ratio(out, real)
+                              for out, real in zip(outputs, origin_label)])
+            total += len(origin_label)
+            # calc accuracy
+        if j == 0:
+            print('Test accuracy: ', correct / total * 100, '%')
+            print('Levenshtein ratio: ', ratio_sum / total * 100, '%')
+        else:
+            print('Accuracy on train data: ', correct / total * 100, '%')
+            print('Levenshtein ratio on train data: ',
+                  ratio_sum / total * 100, '%')
 
-
-def main(training=True):
-    """
-    Main
-
-    Args:
-        training (bool, optional): If True, train the model, otherwise test it (default: True)
-    """
-    
-    model_path = 'models/crnn.pth'
-    with open('letters.txt', 'r') as fp:
-        letters = fp.readline()
-    root = 'data/'
-    if training:
-        model = CRNN(1, len(letters) + 2)
-        start_epoch = 0
-        epoch_num = 50
-        lr = 0.0001
-        # if there is pre-trained model, load it
-        if os.path.exists(model_path):
-            print('Pre-trained model detected.\nLoading model...')
-            model.load_state_dict(torch.load(model_path))
-        while (True):
-            model = train(root, start_epoch, epoch_num, letters, 32,
-                        model=model, lr=lr, data_size=10000)
-            test(root, model, letters, 32, 5000)
-            # save the trained model for training again
-            torch.save(model.state_dict(), model_path)
-    else:
-        model = CRNN(1, len(letters) + 1)
-        if os.path.exists(model_path):
-            model.load_state_dict(torch.load(model_path))
-        test(root, model, letters, 32, 500)
-
-def test_env():
-    model_dir = 'models/'
-    data_dir = 'data/'
-    if os.path.exists(model_dir) and os.path.exists(data_dir):
-        return True
-    else:
-        return False
 
 if __name__ == '__main__':
-    if test_env():
-        main(training=True)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--test', action='store_true', help='Whether to test directly (default is training)')
+    parser.add_argument('--root', default='data/', help='path to dataset (default="data/")')
+    parser.add_argument('--model_path', default='models/crnn.pth', help='path to model to save (default="models/crnn.pth")')
+    parser.add_argument('--workers', type=int, default=2, help='number of data loading workers (default=2)')
+    parser.add_argument('--batchsize', type=int, default=64, help='input batch size (default=64)')
+    parser.add_argument('--data_size', type=int, default=None, help='input data size (default all data)')
+    parser.add_argument('--epoch_num', type=int, default=50, help='number of epochs to train for (default=50)')
+    parser.add_argument('--lr', type=float, default=0.00005, help='learning rate for Critic (default=0.00005)')
+    parser.add_argument('--adam', action='store_true', help='Whether to use adam (default is rmsprop)')
+    parser.add_argument('--adadelta', action='store_true', help='Whether to use adadelta (default is rmsprop)')
+    opt = parser.parse_args()
+    print(opt)
+
+    if not os.path.exists(os.path.dirname(opt.model_path)):
+        os.makedirs(os.path.dirname(opt.model_path))
+    with open('letters.txt', 'r') as fp:
+        letters = fp.readline()
+
+    if opt.adam:
+        optim = 'adam'
+    elif opt.adadelta:
+        optim = 'adadelta'
     else:
-        print('There is something wrong with your environment, for more information, please look at README')
+        optim = 'rmsprop'
+
+    if not opt.test:
+        train(opt.root, opt.model_path, letters, opt.batchsize,
+              opt.epoch_num, lr=opt.lr, data_size=opt.data_size,
+              optim=optim, workers=opt.workers)
+    test(opt.root, opt.model_path, letters, opt.batchsize,
+         data_size=opt.data_size, workers=opt.workers)

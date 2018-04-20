@@ -88,9 +88,11 @@ class Loader(object):
         batch_size (int): Size of each batch
         training (bool, optional): If True, train the model, otherwise test it (default: True)
         data_size (int, optional): size of data to load (default: All data)
+        workers (int): Workers number to load data of each ratio (default: 2)
     """
 
-    def __init__(self, root, batch_size, training=True, data_size=None):
+    def __init__(self, root, batch_size, training=True,
+                 data_size=None, workers=2):
         # load data list
         data_list = {2:[], 5:[], 8:[]}
         with open(os.path.join(root, 'label.txt')) as fp:
@@ -107,10 +109,11 @@ class Loader(object):
         datasets = [SingleRatioImage(img_root, k, data_list[k])
                     for k in data_list]
         del data_list
-        self.loaders = []
-        for dataset in datasets:
-            self.loaders.append(DataLoader(dataset, batch_size=batch_size,
-                                           shuffle=training, num_workers=2))
+        self.loaders = [
+            DataLoader(dataset, batch_size=batch_size,
+                       shuffle=training, num_workers=workers)
+            for dataset in datasets
+        ]
         del datasets
 
     def __iter__(self):
@@ -126,7 +129,6 @@ class LabelTransformer(object):
     """
 
     def __init__(self, letters):
-        letters = ''.join(set(letters))
         self.encode_map = {letter: idx+1 for idx, letter in enumerate(letters)}
         self.decode_map = ''.join((' ', letters, ' '))
 
