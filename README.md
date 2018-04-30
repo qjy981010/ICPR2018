@@ -1,4 +1,8 @@
 # ICPR2018
+### 更新 4.30
+- 增加attention.py, 使用self-attention机制
+- 保持一通道
+- 修改CRNN.py
 
 ### 更新
 - lr默认为延续之前优化方法里的lr或最开始的0.00005；若指定了lr，则修改之前保存的optim里的lr
