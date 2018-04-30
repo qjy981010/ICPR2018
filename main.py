@@ -159,8 +159,9 @@ def test(root, model_path, letters, batch_size, data_size=None, workers=2):
             outputs = labeltransformer.decode(outputs.data)
             label_pairs = zip(outputs, origin_label)
             correct += sum([out == real for out, real in label_pairs])
-            for out, real in label_pairs:
-                fp.write(''.join(real, '\t\t', out, '\n'))
+            if j == 0:
+                for out, real in label_pairs:
+                    fp.write(''.join(real, '\t\t', out, '\n'))
             ratio_sum += sum([Levenshtein.ratio(out, real)
                               for out, real in zip(outputs, origin_label)])
             total += len(origin_label)
