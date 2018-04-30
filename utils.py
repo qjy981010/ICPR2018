@@ -29,7 +29,7 @@ class SingleRatioImage(Dataset):
         self.transform = transforms.Compose((
             transforms.Resize((32, 32 * ratio), Image.ANTIALIAS),
             transforms.Grayscale(),
-            transforms.ColorJitter(0.05, 0.05, 0.05, 0.05),
+            transforms.ColorJitter(),
             transforms.ToTensor()
         ))
 

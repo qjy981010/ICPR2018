@@ -1,6 +1,7 @@
 import torch.nn as nn
 import math
 from attention import MultiHeadAttention
+import torch.nn.init as init
 
 class CRNN(nn.Module):
     """
@@ -27,8 +28,8 @@ class CRNN(nn.Module):
         # output channel number of LSTM in pytorch is hidden_size *
         #     num_directions, num_directions=2 for bidirectional LSTM
         self.rnn1 = nn.GRU(self.cnn_struct[-1][-1],
-                            hidden_size, bidirectional=True)
-        self.rnn2 = nn.GRU(hidden_size*2, hidden_size, bidirectional=True)
+                            hidden_size, bidirectional=True,dropout=0.2)
+        self.rnn2 = nn.GRU(hidden_size*2, hidden_size, bidirectional=True,dropout=0.2)
         self.slf_attention = MultiHeadAttention(8, hidden_size * 2, 64, 64, dropout=dropout) # n_head:8 d_model:512  d_k:64  d_v:64
         # fully-connected
         self.fc = nn.Linear(hidden_size*2, out_channels)
@@ -67,16 +68,13 @@ class CRNN(nn.Module):
     def _initialize_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
+                init.xavier_normal(m.weight.data)
                 if m.bias is not None:
                     m.bias.data.zero_()
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
             elif isinstance(m, nn.Linear):
-                m.weight.data.normal_(0, 0.01)
+                init.xavier_normal(m.weight.data)
                 m.bias.data.zero_()
-
-
 

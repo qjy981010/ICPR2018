@@ -14,11 +14,10 @@ from crnn import CRNN
 from utils import *
 
 
-def train(root, model_path, letters, batch_size, epoch_num,
-          lr=0.00005, data_size=None, optim='rmsprop', workers=2):
+def train(root, model_path, letters, batch_size, epoch_num, lr=0.1,
+          decay=5e-4, data_size=None, optim='adadelta', workers=2):
     """
     Train CRNN model
-
     Args:
         root (str): Root directory of dataset
         model_path (str): Path to save/load model
@@ -26,27 +25,28 @@ def train(root, model_path, letters, batch_size, epoch_num,
         batch_size (int): Size of each batch
         epoch_num (int): Epoch number to train
         lr (float, optional): Coefficient that scale delta before it is applied
-            to the parameters (default: 1.0)
+            to the parameters (default: 0.1)
+        decay (float, optional): Weight decay in the model (default: 5e-4)
         data_size (int, optional): Size of data to use (default: All data)
         optim (str): Name of optim method (default: 'rmsprop')
         workers (int): Workers number to load data of each ratio (default: 2)
-
     Returns:
         CRNN: Trained CRNN model
     """
 
     model = CRNN(1, len(letters) + 2)
     if optim == 'adam':
-        optimizer = torch.optim.Adam(model.parameters())
-    elif optim == 'adadelta':
-        optimizer = torch.optim.Adadelta(model.parameters())
+        optimizer = torch.optim.Adam(model.parameters(), weight_decay=decay)
+    elif optim == 'rmsprop':
+        optimizer = torch.optim.RMSprop(model.parameters(), weight_decay=decay)
     else:
-        optimizer = torch.optim.RMSprop(model.parameters())
+        optimizer = torch.optim.Adadelta(model.parameters(), weight_decay=decay)
     start_epoch = 0
     if os.path.exists(model_path):
         print('Pre-trained model detected.\nLoading model...')
         checkpoint = torch.load(model_path)
         model.load_state_dict(checkpoint['model'])
+        # if optimizer != None:
         optimizer.load_state_dict(checkpoint['optim'])
         if lr != None:
             for param_group in optimizer.param_groups:
@@ -54,7 +54,7 @@ def train(root, model_path, letters, batch_size, epoch_num,
         start_epoch = checkpoint['epoch']
     else:
         if lr == None:
-            lr = 0.00005
+            lr = 0.1
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
 
@@ -96,7 +96,6 @@ def train(root, model_path, letters, batch_size, epoch_num,
             optimizer.step()
             loss_sum += loss.data[0]
         print('loss = %f' % (loss_sum, ))
-    print('Finished Training')
 
     checkpoint = {
         'model':model.state_dict(),
@@ -104,13 +103,12 @@ def train(root, model_path, letters, batch_size, epoch_num,
         'epoch':start_epoch+epoch_num
     }
     torch.save(checkpoint, model_path)
-    return model
+    print('Model saved')
 
 
 def test(root, model_path, letters, batch_size, data_size=None, workers=2):
     """
     Test CRNN model
-
     Args:
         root (str): Root directory of dataset
         model_path (str): Path to save/load model
@@ -139,6 +137,7 @@ def test(root, model_path, letters, batch_size, data_size=None, workers=2):
         print("*****   Warning: Cuda isn't available!  *****")
     # get encoder and decoder
     labeltransformer = LabelTransformer(letters)
+    fp = open('result.txt', 'w')
 
     print('====    Testing..   ====')
     # .eval() has any effect on Dropout and BatchNorm.
@@ -155,8 +154,11 @@ def test(root, model_path, letters, batch_size, data_size=None, workers=2):
             outputs = model(img)  # length × batch × num_letters
             outputs = outputs.max(2)[1].transpose(0, 1)  # batch × length
             outputs = labeltransformer.decode(outputs.data)
-            correct += sum([out == real for out,
-                            real in zip(outputs, origin_label)])
+            label_pairs = zip(outputs, origin_label)
+            correct += sum([out == real for out, real in label_pairs])
+            if j == 0:
+                for out, real in label_pairs:
+                    fp.write(''.join(real, '\t\t', out, '\n'))
             ratio_sum += sum([Levenshtein.ratio(out, real)
                               for out, real in zip(outputs, origin_label)])
             total += len(origin_label)
@@ -168,6 +170,7 @@ def test(root, model_path, letters, batch_size, data_size=None, workers=2):
             print('Accuracy on train data: ', correct / total * 100, '%')
             print('Levenshtein ratio on train data: ',
                   ratio_sum / total * 100, '%')
+    fp.close()
 
 
 if __name__ == '__main__':
@@ -180,9 +183,11 @@ if __name__ == '__main__':
     parser.add_argument('--data_size', type=int, default=None, help='input data size (default all data)')
     parser.add_argument('--epoch_num', type=int, default=50, help='number of epochs to train for (default=50)')
     parser.add_argument('--check_epoch', type=int, default=10, help='epoch to save and test (default=10)')
-    parser.add_argument('--lr', type=float, default=None, help='learning rate for Critic (default=no change or 0.00005)')
-    parser.add_argument('--adam', action='store_true', help='Whether to use adam (default is rmsprop)')
-    parser.add_argument('--adadelta', action='store_true', help='Whether to use adadelta (default is rmsprop)')
+    parser.add_argument('--lr', type=float, default=None, help='learning rate for optim (default=no change or 0.1)')
+    parser.add_argument('--decay', type=float, default=5e-4, help='weight decay for optim (default=no change or 5e-4)')
+    parser.add_argument('--adam', action='store_true', help='Whether to use adam (default is adadelta)')
+    parser.add_argument('--adadelta', action='store_true', help='Whether to use adadelta (default is adadelta)')
+    parser.add_argument('--rmsprop', action='store_true', help='Whether to use rmsprop (default is adadelta)')
     opt = parser.parse_args()
     print(opt)
 
@@ -193,15 +198,16 @@ if __name__ == '__main__':
 
     if opt.adam:
         optim = 'adam'
-    elif opt.adadelta:
-        optim = 'adadelta'
-    else:
+    elif opt.rmsprop:
         optim = 'rmsprop'
+    else:
+        optim = 'adadelta'
 
     for i in range(opt.epoch_num // opt.check_epoch):
         if not opt.test:
             train(opt.root, opt.model_path, letters, opt.batchsize,
-                  opt.check_epoch, lr=opt.lr, data_size=opt.data_size,
-                  optim=optim, workers=opt.workers)
+                  opt.check_epoch, lr=opt.lr, decay=opt.decay,
+                  data_size=opt.data_size, optim=optim, workers=opt.workers)
         test(opt.root, opt.model_path, letters, opt.batchsize,
              data_size=opt.data_size, workers=opt.workers)
+        torch.cuda.empty_cache()
