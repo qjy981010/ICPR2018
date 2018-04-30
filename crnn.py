@@ -1,6 +1,6 @@
 import torch.nn as nn
 import math
-
+from attention import MultiHeadAttention
 
 class CRNN(nn.Module):
     """
@@ -11,7 +11,7 @@ class CRNN(nn.Module):
         out_channels (int): output channel number(class number), letters number in dataset
     """
 
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, dropout=0.1):
         super().__init__()
         self.in_channels = in_channels
         hidden_size = 256
@@ -22,23 +22,27 @@ class CRNN(nn.Module):
         # pooling layer struct
         self.pool_struct = ((2, 2), (2, 2), (2, 1), (2, 1), None)
         # add batchnorm layer or not
-        self.batchnorm = (False, False, False, True, False)
+        self.batchnorm = (True, True, True, True, True)
         self.cnn = self._get_cnn_layers()
         # output channel number of LSTM in pytorch is hidden_size *
         #     num_directions, num_directions=2 for bidirectional LSTM
-        self.rnn1 = nn.LSTM(self.cnn_struct[-1][-1],
+        self.rnn1 = nn.GRU(self.cnn_struct[-1][-1],
                             hidden_size, bidirectional=True)
-        self.rnn2 = nn.LSTM(hidden_size*2, hidden_size, bidirectional=True)
+        self.rnn2 = nn.GRU(hidden_size*2, hidden_size, bidirectional=True)
+        self.slf_attention = MultiHeadAttention(8, hidden_size * 2, 64, 64, dropout=dropout) # n_head:8 d_model:512  d_k:64  d_v:64
         # fully-connected
         self.fc = nn.Linear(hidden_size*2, out_channels)
         self._initialize_weights()
 
-    def forward(self, x):   # input: height=32, width>=100
+    def forward(self, x, attn_mask=None):   # input: height=32, width>=100
         x = self.cnn(x)   # batch, channel=512, height=1, width>=24
         x = x.squeeze(2)   # batch, channel=512, width>=24
         x = x.permute(2, 0, 1)   # width>=24, batch, channel=512
         x = self.rnn1(x)[0]   # length=width>=24, batch, channel=256*2
         x = self.rnn2(x)[0]   # length=width>=24, batch, channel=256*2
+        x = x.permute(1, 0, 2) # batch, length, channel=256 * 2
+        x = self.slf_attention(x, x, x, attn_mask=None)[0] # batch, length, channel=256 * 2
+        x = x.permute(1, 0, 2).contiguous() # length, batch, channel=256 * 2
         l, b, h = x.size()
         x = x.view(l*b, h)   # length*batch, hidden_size*2
         x = self.fc(x)   # length*batch, output_size
@@ -73,3 +77,6 @@ class CRNN(nn.Module):
             elif isinstance(m, nn.Linear):
                 m.weight.data.normal_(0, 0.01)
                 m.bias.data.zero_()
+
+
+
