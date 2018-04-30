@@ -1,6 +1,7 @@
 # ICPR2018
 ### 更新 4.30
 - 增加attention.py, 使用self-attention机制
+- LSTM 修改为 GRU
 - 保持一通道
 - 修改CRNN.py
 
