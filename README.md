@@ -1,9 +1,19 @@
 # ICPR2018
-### 更新 4.30
+### 更新 4.30 22:44
+combine the latest qjy and sml
 - 增加attention.py, 使用self-attention机制
 - LSTM 修改为 GRU
 - 保持一通道
 - 修改CRNN.py
+- 在test中，将label与得到的结果输出到result.txt
+- 默认优化方法换成了adadelta，lr默认0.01
+- 加了weight-decay，默认5e-4，减轻过拟合
+- 加了colorjitter，减轻过拟合
+- 训练集从100000加到了110000
+- 增加了对不正常图片的try-except
+- 默认增加了bn
+- 对LSTM增加了0.2的dropout
+- 初始化方法换为xavier normal
 
 ### 更新
 - lr默认为延续之前优化方法里的lr或最开始的0.00005；若指定了lr，则修改之前保存的optim里的lr
