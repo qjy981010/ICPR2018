@@ -29,7 +29,7 @@ class SingleRatioImage(Dataset):
         self.transform = transforms.Compose((
             transforms.Resize((32, 32 * ratio), Image.ANTIALIAS),
             transforms.Grayscale(),
-            transforms.ColorJitter(0.05, 0.05, 0.05, 0.05),
+            transforms.ColorJitter(),
             transforms.ToTensor()
         ))
 
@@ -40,7 +40,10 @@ class SingleRatioImage(Dataset):
 
     def __getitem__(self, idx):
         name, label = self.data_list[idx]
-        img = self.transform(Image.open(os.path.join(self.folder, name)))
+        try:
+            img = self.transform(Image.open(os.path.join(self.folder, name)))
+        except OSError:
+            return self[np.random.randint(len(self))]
         return img, label
 
 
@@ -97,8 +100,8 @@ class Loader(object):
         data_list = {2:[], 5:[], 8:[]}
         with open(os.path.join(root, 'label.txt')) as fp:
             lines = fp.readlines()
-            train_lines = lines[:100000]
-            test_lines = lines[100000:]
+            train_lines = lines[:110000]
+            test_lines = lines[110000:]
             lines = train_lines if training else test_lines
             for line in lines[:data_size]:
                 folder, name, label = line.split()[:3]

@@ -1,5 +1,71 @@
-import torch.nn as nn
 import math
+import torch.nn as nn
+import torch.nn.init as init
+
+
+class SelfAttention(nn.Module):
+    def __init__(self, attention_size, batch_first=False):
+        super(SelfAttention, self).__init__()
+
+        self.batch_first = batch_first
+        self.attention_weights = Parameter(torch.FloatTensor(attention_size))
+        self.softmax = nn.Softmax(dim=-1)
+        self.tanh = nn.Tanh()
+
+        init.uniform(self.attention_weights.data, -0.005, 0.005)
+
+    def get_mask(self, attentions, lengths):
+        """
+        Construct mask for padded itemsteps, based on lengths
+        """
+        max_len = max(lengths.data)
+        mask = Variable(torch.ones(attentions.size())).detach()
+
+        if attentions.data.is_cuda:
+            mask = mask.cuda()
+
+        for i, l in enumerate(lengths.data):  # skip the first sentence
+            if l < max_len:
+                mask[i, l:] = 0
+        return mask
+
+    def forward(self, inputs, lengths):
+
+        ##################################################################
+        # STEP 1 - perform dot product
+        # of the attention vector and each hidden state
+        ##################################################################
+
+        # inputs is a 3D Tensor: batch, len, hidden_size
+        # scores is a 2D Tensor: batch, len
+        scores = self.tanh(inputs.matmul(self.attention_weights))
+        scores = self.softmax(scores)
+
+        ##################################################################
+        # Step 2 - Masking
+        ##################################################################
+
+        # construct a mask, based on the sentence lengths
+        mask = self.get_mask(scores, lengths)
+
+        # apply the mask - zero out masked timesteps
+        masked_scores = scores * mask
+
+        # re-normalize the masked scores
+        _sums = masked_scores.sum(-1, keepdim=True)  # sums per row
+        scores = masked_scores.div(_sums)  # divide by row sum
+
+        ##################################################################
+        # Step 3 - Weighted sum of hidden states, by the attention scores
+        ##################################################################
+
+        # multiply each hidden state with the attention weights
+        weighted = torch.mul(inputs, scores.unsqueeze(-1).expand_as(inputs))
+
+        # sum the hidden states
+        representations = weighted.sum(1).squeeze()
+
+        return representations, scores
 
 
 class CRNN(nn.Module):
@@ -22,13 +88,14 @@ class CRNN(nn.Module):
         # pooling layer struct
         self.pool_struct = ((2, 2), (2, 2), (2, 1), (2, 1), None)
         # add batchnorm layer or not
-        self.batchnorm = (False, False, False, True, False)
+        self.batchnorm = (True, True, True, True, True)
         self.cnn = self._get_cnn_layers()
         # output channel number of LSTM in pytorch is hidden_size *
         #     num_directions, num_directions=2 for bidirectional LSTM
-        self.rnn1 = nn.LSTM(self.cnn_struct[-1][-1],
-                            hidden_size, bidirectional=True)
-        self.rnn2 = nn.LSTM(hidden_size*2, hidden_size, bidirectional=True)
+        self.rnn1 = nn.LSTM(self.cnn_struct[-1][-1], hidden_size,
+                            bidirectional=True, dropout=0.2)
+        self.rnn2 = nn.LSTM(hidden_size*2, hidden_size,
+                            bidirectional=True, dropout=0.2)
         # fully-connected
         self.fc = nn.Linear(hidden_size*2, out_channels)
         self._initialize_weights()
@@ -63,13 +130,26 @@ class CRNN(nn.Module):
     def _initialize_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
+                init.xavier_normal(m.weight.data)
                 if m.bias is not None:
                     m.bias.data.zero_()
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
             elif isinstance(m, nn.Linear):
-                m.weight.data.normal_(0, 0.01)
+                init.xavier_normal(m.weight.data)
                 m.bias.data.zero_()
+
+    # def _initialize_weights(self):
+    #     for m in self.modules():
+    #         if isinstance(m, nn.Conv2d):
+    #             n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+    #             m.weight.data.normal_(0, math.sqrt(2. / n))
+    #             if m.bias is not None:
+    #                 m.bias.data.zero_()
+    #         elif isinstance(m, nn.BatchNorm2d):
+    #             m.weight.data.fill_(1)
+    #             m.bias.data.zero_()
+    #         elif isinstance(m, nn.Linear):
+    #             m.weight.data.normal_(0, 0.01)
+    #             m.bias.data.zero_()
