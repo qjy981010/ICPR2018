@@ -2,6 +2,12 @@
 
 ### 更新
 
+5.2:
+- 改用GRU
+- 加了许多dropout
+- 改了输出到result.txt的bug
+- 67%，基本没有过拟合，但loss下降很慢
+
 4.30:
 - 在test中，将label与得到的结果输出到result.txt
 - 默认优化方法换成了adadelta，lr默认0.01
