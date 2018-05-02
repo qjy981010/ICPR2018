@@ -2,6 +2,7 @@ import numpy as np
 import torch.nn.init as init
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 # class SelfAttentiveEncoder(nn.Module):
@@ -26,6 +27,29 @@ import torch.nn as nn
 #         alphas = x.permute(0, 2, 1).contiguous() # [batch, r, length]
 #         return torch.bmm(alphas, x)
 
+
+class LayerNormalization(nn.Module):
+    ''' Layer normalization module '''
+
+    def __init__(self, d_hid, eps=1e-3):
+        super(LayerNormalization, self).__init__()
+
+        self.eps = eps
+        self.a_2 = nn.Parameter(torch.ones(d_hid), requires_grad=True)
+        self.b_2 = nn.Parameter(torch.zeros(d_hid), requires_grad=True)
+
+    def forward(self, z):
+        if z.size(1) == 1:
+            return z
+
+        mu = torch.mean(z, keepdim=True, dim=-1)
+        sigma = torch.std(z, keepdim=True, dim=-1)
+        ln_out = (z - mu.expand_as(z)) / (sigma.expand_as(z) + self.eps)
+        ln_out = ln_out * self.a_2.expand_as(ln_out) + self.b_2.expand_as(ln_out)
+
+        return ln_out
+
+
 class MultiHeadAttention(nn.Module):
     def __init__(self, n_head, d_model, d_k, d_v, dropout=0.1):
         super(MultiHeadAttention, self).__init__()
@@ -40,6 +64,8 @@ class MultiHeadAttention(nn.Module):
         self.attention = ScaledDotProductAttention(d_model)
         self.proj = Linear(n_head * d_v, d_model)
         self.dropout = nn.Dropout(dropout)
+
+        self.layer_norm = LayerNormalization(d_model)
 
         init.xavier_normal(self.w_qs)
         init.xavier_normal(self.w_ks)
@@ -71,6 +97,7 @@ class MultiHeadAttention(nn.Module):
         # project back to n_model
         outputs = self.proj(outputs)
         outputs = self.dropout(outputs)
+        outputs = self.layer_norm(outputs)
         return outputs, attns
 
 
@@ -79,7 +106,7 @@ class ScaledDotProductAttention(nn.Module):
         super(ScaledDotProductAttention, self).__init__()
         self.temper = np.power(d_model, 0.5)
         self.dropout = nn.Dropout(attn_dropout)
-        self.softmax = nn.Softmax(-1)
+        self.softmax = nn.Softmax(1)
     def forward(self, q, k, v, attn_mask=None):
         # k, q, v : [batch, length, hidden_size * 2(d_model)]
         attn = torch.bmm(q, k.transpose(1, 2)) / self.temper

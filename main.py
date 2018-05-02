@@ -54,7 +54,7 @@ def train(root, model_path, letters, batch_size, epoch_num, lr=0.1,
         start_epoch = checkpoint['epoch']
     else:
         if lr == None:
-            lr = 0.1
+            lr = 0.001 if optim == 'rmsprop' else (0.0001 if optim == 'adam' else 0.1)
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
 
@@ -90,7 +90,7 @@ def train(root, model_path, letters, batch_size, epoch_num, lr=0.1,
                 [outputs.size(0)]*outputs.size(1)))
 
             loss = criterion(outputs, label, output_length, label_length)
-            if (np.isnan(loss.data[0])):
+            if np.isnan(loss.data[0]) or abs(loss.data[0]) == float('inf'):
                 continue
             loss.backward()
             optimizer.step()
@@ -154,11 +154,11 @@ def test(root, model_path, letters, batch_size, data_size=None, workers=2):
             outputs = model(img)  # length × batch × num_letters
             outputs = outputs.max(2)[1].transpose(0, 1)  # batch × length
             outputs = labeltransformer.decode(outputs.data)
-            label_pairs = zip(outputs, origin_label)
+            label_pairs = list(zip(outputs, origin_label))
             correct += sum([out == real for out, real in label_pairs])
             if j == 0:
                 for out, real in label_pairs:
-                    fp.write(''.join(real, '\t\t', out, '\n'))
+                    fp.write(''.join((real, '\t\t', out, '\n')))
             ratio_sum += sum([Levenshtein.ratio(out, real)
                               for out, real in zip(outputs, origin_label)])
             total += len(origin_label)
@@ -208,6 +208,9 @@ if __name__ == '__main__':
             train(opt.root, opt.model_path, letters, opt.batchsize,
                   opt.check_epoch, lr=opt.lr, decay=opt.decay,
                   data_size=opt.data_size, optim=optim, workers=opt.workers)
+            opt.lr = None
         test(opt.root, opt.model_path, letters, opt.batchsize,
              data_size=opt.data_size, workers=opt.workers)
         torch.cuda.empty_cache()
+        if opt.test:
+            break
