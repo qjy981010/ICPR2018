@@ -21,7 +21,7 @@ class SingleRatioImage(Dataset):
         data_list (list: [(name1, label1), (name2, label2), ...]): list of data
     """
 
-    def __init__(self, root, ratio, data_list):
+    def __init__(self, root, ratio, data_list, training=True):
         super().__init__()
         self.data_list = data_list
 
@@ -34,6 +34,7 @@ class SingleRatioImage(Dataset):
         ))
 
         self.folder = os.path.join(root, str(ratio))
+        self.ratio = ratio
 
     def __len__(self, ):
         return len(self.data_list)
@@ -44,7 +45,10 @@ class SingleRatioImage(Dataset):
             img = self.transform(Image.open(os.path.join(self.folder, name)))
         except OSError:
             return self[np.random.randint(len(self))]
-        return img, label
+        if training:
+            return img, label
+        else:
+            return img, label, self.ratio, name
 
 
 class LoadIter(object):
@@ -100,8 +104,8 @@ class Loader(object):
         data_list = {2:[], 5:[], 8:[]}
         with open(os.path.join(root, 'label.txt')) as fp:
             lines = fp.readlines()
-            train_lines = lines[:110000]
-            test_lines = lines[110000:]
+            train_lines = lines[:120000] ############################################
+            test_lines = lines[120000:]
             lines = train_lines if training else test_lines
             for line in lines[:data_size]:
                 folder, name, label = line.split()[:3]
@@ -109,7 +113,7 @@ class Loader(object):
         img_root = os.path.join(root, 'image')
 
         # get data loader
-        datasets = [SingleRatioImage(img_root, k, data_list[k])
+        datasets = [SingleRatioImage(img_root, k, data_list[k], training)
                     for k in data_list]
         del data_list
         self.loaders = [

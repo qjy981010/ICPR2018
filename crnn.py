@@ -89,12 +89,13 @@ class CRNN(nn.Module):
         self.pool_struct = ((2, 2), (2, 2), (2, 1), (2, 1), None)
         # add batchnorm layer or not
         self.batchnorm = (True, True, True, True, True)
+        self.dropout = (0, 0, 0.1, 0.2, 0.2)
         self.cnn = self._get_cnn_layers()
         # output channel number of LSTM in pytorch is hidden_size *
         #     num_directions, num_directions=2 for bidirectional LSTM
-        self.rnn1 = nn.LSTM(self.cnn_struct[-1][-1], hidden_size,
+        self.rnn1 = nn.GRU(self.cnn_struct[-1][-1], hidden_size,
                             bidirectional=True, dropout=0.2)
-        self.rnn2 = nn.LSTM(hidden_size*2, hidden_size,
+        self.rnn2 = nn.GRU(hidden_size*2, hidden_size,
                             bidirectional=True, dropout=0.2)
         # fully-connected
         self.fc = nn.Linear(hidden_size*2, out_channels)
@@ -122,6 +123,8 @@ class CRNN(nn.Module):
                 if self.batchnorm[i]:
                     cnn_layers.append(nn.BatchNorm2d(out_channels))
                 cnn_layers.append(nn.ReLU(inplace=True))
+                if self.dropout[i]:
+                    cnn_layers.append(nn.Dropout(self.dropout[i]))
                 in_channels = out_channels
             if (self.pool_struct[i]):
                 cnn_layers.append(nn.MaxPool2d(self.pool_struct[i]))

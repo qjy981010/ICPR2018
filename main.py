@@ -149,7 +149,7 @@ def test(root, model_path, letters, batch_size, data_size=None, workers=2):
         correct = 0
         total = 0
         ratio_sum = 0
-        for i, (img, origin_label) in enumerate(loaders[j]):
+        for i, (img, origin_label, ratio, name) in enumerate(loaders[j]):
             if use_cuda:
                 img = img.cuda()
             img = Variable(img)
@@ -157,11 +157,11 @@ def test(root, model_path, letters, batch_size, data_size=None, workers=2):
             outputs = model(img)  # length × batch × num_letters
             outputs = outputs.max(2)[1].transpose(0, 1)  # batch × length
             outputs = labeltransformer.decode(outputs.data)
-            label_pairs = zip(outputs, origin_label)
-            correct += sum([out == real for out, real in label_pairs])
+            label_pairs = list(zip(outputs, origin_label, ratio, name))
+            correct += sum([out == real for out, real, tmp_1, tmp_2 in label_pairs])
             if j == 0:
-                for out, real in label_pairs:
-                    fp.write(''.join(real, '\t\t', out, '\n'))
+                for out, real, img_ratio, img_name in label_pairs:
+                    fp.write(''.join((real, '\t\t', out, '\t\t', str(img_ratio), '\t\t', img_name, '\n')))
             ratio_sum += sum([Levenshtein.ratio(out, real)
                               for out, real in zip(outputs, origin_label)])
             total += len(origin_label)
@@ -214,3 +214,5 @@ if __name__ == '__main__':
         test(opt.root, opt.model_path, letters, opt.batchsize,
              data_size=opt.data_size, workers=opt.workers)
         torch.cuda.empty_cache()
+        if opt.test:
+            exit(0)
