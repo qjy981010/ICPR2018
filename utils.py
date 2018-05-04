@@ -35,6 +35,7 @@ class SingleRatioImage(Dataset):
 
         self.folder = os.path.join(root, str(ratio))
         self.ratio = ratio
+        self.training = training
 
     def __len__(self, ):
         return len(self.data_list)
@@ -45,7 +46,7 @@ class SingleRatioImage(Dataset):
             img = self.transform(Image.open(os.path.join(self.folder, name)))
         except OSError:
             return self[np.random.randint(len(self))]
-        if training:
+        if self.training:
             return img, label
         else:
             return img, label, self.ratio, name
