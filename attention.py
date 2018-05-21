@@ -31,7 +31,7 @@ import torch.nn.functional as F
 class LayerNormalization(nn.Module):
     ''' Layer normalization module '''
 
-    def __init__(self, d_hid, eps=1e-3):
+    def __init__(self, d_hid, eps=1e-7):
         super(LayerNormalization, self).__init__()
 
         self.eps = eps

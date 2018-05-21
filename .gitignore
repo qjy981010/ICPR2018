@@ -5,4 +5,6 @@ data/*
 ICPR_text_train_part*
 __pycache__/
 .ipynb_checkpoints/
-result.txt
+models/*
+code/
+model.zip

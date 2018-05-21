@@ -105,8 +105,8 @@ class Loader(object):
         data_list = {2:[], 5:[], 8:[]}
         with open(os.path.join(root, 'label.txt')) as fp:
             lines = fp.readlines()
-            train_lines = lines[:120000] ############################################
-            test_lines = lines[120000:]
+            train_lines = lines[:140000] ############################################
+            test_lines = lines[140000:]
             lines = train_lines if training else test_lines
             for line in lines[:data_size]:
                 folder, name, label = line.split()[:3]

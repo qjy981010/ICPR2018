@@ -42,14 +42,13 @@ def train(root, model_path, letters, batch_size, epoch_num, lr=0.1,
     elif optim == 'rmsprop':
         optimizer = torch.optim.RMSprop(model.parameters(), weight_decay=decay)
     else:
-        optimizer = torch.optim.Adadelta(model.parameters(), weight_decay=decay)
+        optimizer = torch.optim.Adadelta(model.parameters(), weight_decay=decay, lr=0.1)
     start_epoch = 0
     if os.path.exists(model_path):
         print('Pre-trained model detected.\nLoading model...')
         checkpoint = torch.load(model_path)
         model.load_state_dict(checkpoint['model'])
-        # if optimizer != None:
-        optimizer.load_state_dict(checkpoint['optim'])
+        # optimizer.load_state_dict(checkpoint['optim'])
         if lr != None:
             for param_group in optimizer.param_groups:
                 param_group['lr'] = lr
@@ -92,20 +91,24 @@ def train(root, model_path, letters, batch_size, epoch_num, lr=0.1,
                 [outputs.size(0)]*outputs.size(1)))
 
             loss = criterion(outputs, label, output_length, label_length)
-            if (np.isnan(loss.data[0])):
+            if np.isnan(loss.data[0]) or loss.data[0]<0 or abs(loss.data[0])==float('inf'):
+                # print(loss.data[0])
                 continue
             loss.backward()
+            # torch.nn.utils.clip_grad_norm(model.parameters(), 0.25)
             optimizer.step()
             loss_sum += loss.data[0]
         print('loss = %f' % (loss_sum, ))
+        torch.cuda.empty_cache()
 
-    checkpoint = {
-        'model':model.state_dict(),
-        'optim':optimizer.state_dict(),
-        'epoch':start_epoch+epoch_num
-    }
-    torch.save(checkpoint, model_path)
-    print('Model saved')
+        checkpoint = {
+            'model':model.state_dict(),
+            'optim':optimizer.state_dict(),
+            'epoch':epoch + 1
+        }
+        torch.save(checkpoint, model_path)
+        os.system('cp models/crnn.pth models/crnn_%d.pth' % (epoch, ))
+        print('Model saved')
 
 
 def test(root, model_path, letters, batch_size, data_size=None, workers=2):
@@ -169,6 +172,8 @@ def test(root, model_path, letters, batch_size, data_size=None, workers=2):
                               for out, real in zip(outputs, origin_label)])
             total += len(origin_label)
             # calc accuracy
+            if j == 1 and i == 3e4//batch_size:
+                break
         if j == 0:
             print('Test accuracy: ', correct / total * 100, '%')
             print('Levenshtein ratio: ', ratio_sum / total * 100, '%')
@@ -177,6 +182,7 @@ def test(root, model_path, letters, batch_size, data_size=None, workers=2):
             print('Levenshtein ratio on train data: ',
                   ratio_sum / total * 100, '%')
     fp.close()
+    torch.cuda.empty_cache()
 
 
 if __name__ == '__main__':
